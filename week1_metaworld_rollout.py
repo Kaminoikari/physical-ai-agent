@@ -5,6 +5,8 @@
 （SmolVLA 驅動模擬要等 Week 2 對齊 action space 後微調）。
 """
 
+import os
+
 import numpy as np
 import imageio.v2 as imageio
 import metaworld
@@ -13,7 +15,7 @@ import metaworld.policies as policies
 TASK = "pick-place-v3"
 CAMERA = "corner2"
 MAX_STEPS = 200
-OUT_PATH = "/Users/charles/LeRobot/week1_pickplace.mp4"
+OUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "week1_pickplace.mp4")
 
 
 def main() -> None:

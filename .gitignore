@@ -12,5 +12,10 @@ outputs/
 # 大型 demo 素材（可由 week1_metaworld_rollout.py 重新產生）
 *.gif
 
+# 機密（API key 等，絕不進版控）
+.env
+.env.*
+.secrets
+
 # 系統
 .DS_Store

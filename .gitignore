@@ -9,8 +9,9 @@ lerobot-repo/
 # 訓練/評估輸出
 outputs/
 
-# 大型 demo 素材（可由 week1_metaworld_rollout.py 重新產生）
+# 大型 demo 素材（可由 week1_metaworld_rollout.py / lerobot-eval 重新產生）
 *.gif
+*.mp4
 
 # 機密（API key 等，絕不進版控）
 .env

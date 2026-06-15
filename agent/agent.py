@@ -58,7 +58,7 @@ class Agent:
                     observation = str(self._skills.query(step.arg, mode="semantic"))
                     log.append(f"觀察：{observation}")
                     continue
-                if step.skill in ("pick", "place"):
+                if step.skill in ("pick", "place", "execute"):
                     action_taken = True
                     if not self._execute_with_retry(step, assume_success, log):
                         return RunResult("aborted", f"{step.skill}({step.arg}) 連續失敗", log)
@@ -71,20 +71,26 @@ class Agent:
 
     def _execute_with_retry(self, step: Step, assume_success: bool, log: list[str]) -> bool:
         for attempt in range(self._max_retries + 1):
-            if step.skill == "pick":
-                self._current_object = step.arg
-                result = self._skills.pick(step.arg)
-            else:
-                result = self._skills.place(step.arg)
+            result = self._run_action(step)
             log.append(result.detail)
 
             if assume_success:
                 return True
-            if self._verify(step):
+            # execute（task-level）的成敗由技能 rollout 直接回傳；pick/place 另用座標驗證
+            ok = result.ok if step.skill == "execute" else self._verify(step)
+            if ok:
                 return True
             if attempt < self._max_retries:
                 log.append(f"驗證失敗，重試 {step.skill}（第 {attempt + 1} 次）")
         return False
+
+    def _run_action(self, step: Step):
+        if step.skill == "pick":
+            self._current_object = step.arg
+            return self._skills.pick(step.arg)
+        if step.skill == "place":
+            return self._skills.place(step.arg)
+        return self._skills.execute(step.arg)
 
     def _verify(self, step: Step) -> bool:
         if step.skill == "pick":

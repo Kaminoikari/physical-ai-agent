@@ -36,9 +36,17 @@ def main() -> None:
     parser.add_argument("instruction", help="自然語言指令")
     parser.add_argument("--assume-success", action="store_true", help="跳過閉環驗證")
     parser.add_argument("--model", default="claude-sonnet-4-6", help="agent 大腦模型")
+    parser.add_argument(
+        "--fail-first",
+        type=int,
+        default=0,
+        metavar="N",
+        help="注入前 N 次抓取失敗，展示『察覺失敗→重試/abort』的自我修正",
+    )
     args = parser.parse_args()
 
     world = MockWorld.default_scene()
+    world.fail_next_pick = args.fail_first
     agent = Agent(brain=Brain(AnthropicClient(model=args.model)), skills=SkillInterface(world))
 
     print(f"🗣  指令：{args.instruction}")

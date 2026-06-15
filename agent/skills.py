@@ -45,5 +45,7 @@ class SkillInterface:
         return False
 
     def _query_semantic(self, question: str) -> str:
-        parts = [f"{obj.id}({obj.color})" for obj in self.world.list_objects()]
-        return "場上物件：" + "、".join(parts)
+        objects = "、".join(f"{obj.id}({obj.color})" for obj in self.world.list_objects())
+        zones = "、".join(self.world.zones)
+        # 明示區域無顏色標示，agent 才能偵測「對應顏色的盒子」這類歧義並回報 needs_clarification
+        return f"場上物件：{objects}；可用區域（無顏色標示）：{zones}"

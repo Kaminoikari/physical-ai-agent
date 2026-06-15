@@ -1,0 +1,16 @@
+# Python 環境
+.venv/
+__pycache__/
+*.pyc
+
+# 官方 lerobot clone（自帶 .git，不納入本專案版控；用 README 記錄安裝法即可）
+lerobot-repo/
+
+# 訓練/評估輸出
+outputs/
+
+# 大型 demo 素材（可由 week1_metaworld_rollout.py 重新產生）
+*.gif
+
+# 系統
+.DS_Store

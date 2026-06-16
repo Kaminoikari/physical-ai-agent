@@ -1,4 +1,12 @@
-from agent.rollout_engine import RolloutOutcome, InProcessRolloutEngine, PolicyBundle
+import json
+
+from agent.rollout_engine import (
+    InProcessRolloutEngine,
+    LerobotPolicyEnvBuilder,
+    PolicyBundle,
+    RolloutOutcome,
+    SubprocessRolloutEngine,
+)
 
 
 def test_rollout_outcome_holds_pc_success_and_optional_video():
@@ -86,10 +94,6 @@ def test_inprocess_returns_video_path_when_eval_yields_one():
 
 
 # ── SubprocessRolloutEngine ──────────────────────────────────────────────────
-import json
-
-from agent.rollout_engine import SubprocessRolloutEngine
-
 
 def test_subprocess_engine_parses_pc_success(tmp_path, monkeypatch):
     class FakeProc:
@@ -110,9 +114,6 @@ def test_subprocess_engine_parses_pc_success(tmp_path, monkeypatch):
 
 
 # ── LerobotPolicyEnvBuilder ──────────────────────────────────────────────────
-
-from agent.rollout_engine import LerobotPolicyEnvBuilder
-
 
 def test_builder_defaults_to_smolvla():
     builder = LerobotPolicyEnvBuilder()

@@ -87,7 +87,7 @@ class InProcessRolloutEngine:
 
 # ── SubprocessRolloutEngine ──────────────────────────────────────────────────
 
-def _exec_output_dir(output_root: str, suite: str, task_id: int, seq: int) -> str:
+def exec_output_dir(output_root: str, suite: str, task_id: int, seq: int) -> str:
     return os.path.join(output_root, suite, f"task{task_id}", f"run{seq}")
 
 
@@ -103,7 +103,8 @@ class SubprocessRolloutEngine:
         self._exec_seq = 0
 
     def run(self, task_id: int, *, save_video: bool, n_episodes: int) -> RolloutOutcome:
-        out_dir = _exec_output_dir(self._output_root, self._suite, task_id, self._exec_seq)
+        # save_video：lerobot-eval 自行決定錄影，此 baseline 引擎不控制
+        out_dir = exec_output_dir(self._output_root, self._suite, task_id, self._exec_seq)
         self._exec_seq += 1
         os.makedirs(out_dir, exist_ok=True)
         cmd = [

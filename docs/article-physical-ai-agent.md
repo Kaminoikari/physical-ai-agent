@@ -130,13 +130,17 @@ ketchup(4)。這就是開頭那個反問的答案：**這件事 VLA 自己做不
 > 🛑 中止：連續失敗
 > ```
 前四種我都跑在 libero_object（單物件抓放、官方 checkpoint ~100%）。這第五種換到
-`libero_10` 長程 suite——同一個 task 要在一次 rollout 裡依序收兩樣，官方 checkpoint
-實測只有 **~20%** 成功率。於是 agent 跑了三次**真** rollout、每次都是獨立的 20% 擲骰、
-全部失敗，最後誠實 abort。這一段把前面「失敗當一等公民」的設計主張變成了真證據：失敗
-訊號是 LIBERO 的 ground-truth，不是我注入的假失敗（早期 mock 版用 `--fail-first` 腳本
-造假失敗，那是演的；這裡是真的做不到）。agent 沒有假裝成功，也沒有無限重試。
-> 註：~20% 任務的主流結局就是 abort；當某次 rollout 偶然成功時，也會出現「失敗→重試
-> →成功」的救回。兩種都由真 rollout 結果驅動。
+`libero_10` 長程 suite——同一個 task 要在一次 rollout 裡依序收兩樣。我本來想拍一段「失敗
+→重試→救回」的對照，於是把這個 task 跑了一輪又一輪，結果一次都沒成功：首次 probe 的
+5 集裡有 1 集成功（看起來 ~20%），但接著 4 次 demo、共 15 次真 rollout 全敗（含把重試上限
+開到 6 次的那輪）——加總起來 20 次只成功 1 次，這個 task 對 checkpoint 而言其實只有 **~5%**。
+所以我把這個「失敗」如實寫進來：agent 每次都跑真 rollout、全敗、誠實 abort，失敗訊號是
+LIBERO 的 ground-truth，不是我注入的假失敗（早期 mock 版用 `--fail-first` 腳本造假失敗，那是
+演的；這裡是真的做不到）。它沒有假裝成功，也沒有無限重試。
+> 註：「失敗→重試→成功」的救回路徑在程式上存在、也有確定性單元測試證明；但這顆 checkpoint
+> 在這個 task 太弱，我跑了 4 輪都沒拍到救回，於是不硬湊——重試邏輯靠單元測試保證，真實世界
+> 觀察到的結局就是一致的誠實 abort。能誠實說「我想拍卻拍不到、所以這樣記錄」，比一支僥倖的
+> 影片更可信。
 
 ## 工程實務：踩過的雷
 
@@ -163,7 +167,7 @@ ketchup(4)。這就是開頭那個反問的答案：**這件事 VLA 自己做不
 - **慢**：`execute` 經 subprocess 每次重載 policy（~3 min/task）。取捨是重用整條官方
   管線換穩定；可改為載一次 policy + 直呼 `eval_policy()` 加速。
 - **成功率受官方 checkpoint 限制、未自己微調**：libero_object 單物件 ~100%；libero_10
-  長程任務只有 ~20%（夠當真實失敗素材、不適合 happy-path）。沒有雙臂、堆疊。要拉高長程
+  長程任務實測只有 ~5%（夠當真實失敗素材、不適合 happy-path）。沒有雙臂、堆疊。要拉高長程
   成功率得自行微調，本專案刻意只用官方 checkpoint。
 - **Week 1 用 metaworld expert 腳本而非 SmolVLA**：SmolVLA 的 action/obs space 與
   metaworld 不相容，zero-shot 接不上；真正用 SmolVLA 驅動是 Week 2 的 LIBERO。

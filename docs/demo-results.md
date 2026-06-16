@@ -94,15 +94,16 @@ agent 啟動時動態列出，prompt 不寫死任何任務：
 🛑 中止：execute(0) 連續失敗
 ```
 **證明**：`libero_10` 是長程任務（單一 rollout 內要依序收兩樣物品），官方 checkpoint 在此 task
-實測 `pc_success` 僅 **~20%**（單獨 probe：5 集中僅 1 集成功）。agent 跑滿 3 次**真** rollout
-（每次都是獨立的 20% 擲骰）全部失敗後，誠實 abort 並講明原因。重試措辭是「**rollout 失敗**」
-（task-level 沒有座標驗證那步，措辭如實反映真正失敗的環節），不是含糊的「驗證失敗」。
-**這是把 mock `--fail-first` 假失敗換成真 L1 失敗**：失敗訊號來自 LIBERO 的 ground-truth
-`pc_success`，不是腳本注入——「失敗當一等公民」從假證據變真證據。
-> 註：~20% 任務的主流結局是 abort（每輪約 51%）；當某次 rollout 偶然成功時，也會出現
-> 「失敗→重試→成功→✅」的救回結局（每輪約 49%）。兩種結局都純由真 rollout 結果驅動，
-> agent 不靠 assume_success。每次 rollout 影片（含失敗畫面）持久保存在
-> `/kaggle/working/libero_exec/<suite>/task<id>/run<n>/`。
+**實測 ~5% 成功率**（首次 probe 5 集估出 20%，但加計後續 4 次 demo 共 20 次 rollout 只成功 1
+次——單次小樣本高估了）。agent 每次都跑**真** rollout、各自獨立擲骰，全部失敗後誠實 abort 並
+講明原因。重試措辭是「**rollout 失敗**」（task-level 沒有座標驗證那步，如實反映真正失敗的環節），
+不是含糊的「驗證失敗」。**這是把 mock `--fail-first` 假失敗換成真 L1 失敗**：失敗訊號來自
+LIBERO 的 ground-truth `pc_success`，不是腳本注入——「失敗當一等公民」從假證據變真證據。
+> 註：「失敗→重試→成功」的救回結局在程式上存在、且有確定性單元測試
+> `test_execute_failure_then_retry_succeeds` 證明；但這顆 checkpoint 在此 task 太弱（~5%），
+> 跑了 4 輪、15 次真 rollout 一次都沒救回（含 `--max-retries 5` 的 6 連敗）——**真實世界觀察到
+> 的結局一致是誠實 abort**。重試邏輯靠單元測試保證，不靠僥倖拍到一支救回影片。每次 rollout
+> 影片（含失敗畫面）持久保存在 `/kaggle/working/libero_exec/<suite>/task<id>/run<n>/`。
 
 ## 如何重現
 
@@ -119,7 +120,7 @@ agent 啟動時動態列出，prompt 不寫死任何任務：
 - **慢**：`libero_skills.py` 的 execute 以 subprocess 呼叫 `lerobot-eval`，每次重載 policy（~3 min/task）。
   取捨是「重用整條官方管線、最穩」；可改為「載 policy 一次 + 直接呼叫 `eval_policy()`」加速。
 - **成功率受限於官方 checkpoint，未自行微調**：`libero_object` 單物件抓放 100%；`libero_10`
-  長程任務（單 rollout 多步）官方 checkpoint 僅 ~20%——夠當「真實失敗」素材，但不適合當 happy-path。
+  長程任務（單 rollout 多步）官方 checkpoint 實測僅 ~5%——夠當「真實失敗」素材，但不適合當 happy-path。
   未涵蓋雙臂/堆疊。要拉高長程成功率得自行微調（本專案刻意只用官方 checkpoint、不微調）。
 - **Week 1 用 metaworld expert 而非 SmolVLA**：SmolVLA 的 SO101 action/obs space 與 metaworld 4-dim
   不相容，zero-shot 接不上；Week 1 的「看到手臂動」是用 metaworld 內建 expert 腳本驅動。

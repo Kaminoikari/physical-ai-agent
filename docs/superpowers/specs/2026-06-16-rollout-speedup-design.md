@@ -18,9 +18,12 @@ GPU、不是動作本身，是反覆的重載。
 - **#1 policy/env 常駐**：subprocess 重載 → 載一次、常駐複用。（Kaggle-only 才能實測）
 - **#2 plan-only 快迴圈 + 完成記憶**：思考迭代不跑 rollout；同一 run 內已完成子任務不重跑。（本機可測）
 - **#3 rollout 微優化**：不寫 mp4、並行 batch、多回合——大多靠設定即得，不手刻。（Kaggle-only）
+- **#4 GR00T N1.5 swap 接縫（前沿 opt-in）**：builder 參數化成 `(policy_type, policy_path)`，
+  讓同一引擎能在 SmolVLA（便宜預設）與 GR00T N1.5（前沿）間切換 + 一次實測。（Ampere+ GPU 才實測）
 
-**非範圍**：閉環 replan 的「再觀察後重新拆解」語意升級、affordance grounding、跨 session 的
-self-improvement memory、policy 微調訓練——皆為後續獨立 spec。
+**非範圍**：閉環 replan 的「再觀察後重新拆解」語意升級、affordance grounding、跨 episode 的
+self-improvement memory、policy 微調訓練——皆為後續獨立 spec。本 spec 只到「能一鍵換 GR00T 並
+跑通一次」，不含在 GR00T 上做完整自我改進迭代。
 
 ## 3. 選型決策（為什麼走 C）
 
@@ -48,6 +51,16 @@ self-improvement memory、policy 微調訓練——皆為後續獨立 spec。
 - **重要細節**：新版 `eval_policy` 需四條 processor pipeline（`env_pre/post`、`pre/post`），與 policy 一起建。
   故常駐 holder 要握 `{policy + 四條 processor + 各 task 的 env}`，非只 policy。
 
+來源：`huggingface/lerobot` GR00T 整合（HF blog `nvidia/nvidia-isaac-gr00t-in-lerobot`，2026-06 查證）。
+
+- **GR00T N1.5 是標準 lerobot policy**：`policy.type=groot`、checkpoint `nvidia/GR00T-N1.5-3B`，
+  與 SmolVLA、pi0、pi0.5 走**同一 policy 介面**，`lerobot-eval --policy.path=` 用法一致 → 換 policy
+  只是換 builder 參數，`InProcessRolloutEngine` 與 `eval_policy` 呼叫**不改**。
+- **依賴**：`pip install -e ".[libero,groot,dev,test]"` + flash-attention + torch/torchvision；支援 LIBERO。
+- **硬體現實（誠實警告）**：GR00T N1.5 = **3B 參數**（SmolVLA 450M），官方在 H100 / A6000 測；flash-attn
+  需 Ampere+。**Kaggle T4（Turing, sm_75）很可能跑不動或爆 VRAM** → GR00T 實測需租 A6000/L4 等 Ampere+ GPU。
+  故 **SmolVLA 為便宜預設、GR00T 為前沿 opt-in**，非取代關係。
+
 ## 5. 設計
 
 ### 5.1 RolloutEngine 接縫（#1 / #3）
@@ -69,6 +82,9 @@ RolloutEngine（協定）
 
 - 持有一個可注入的 **builder**（負責 `make_policy` + 四條 processor + `make_env`）；首次 `run` 才呼叫，
   之後快取。policy/processor 全 session 建一次；env 以 `dict[task_id, VectorEnv]` 快取、首次用到該 task 才建。
+- **builder 參數化成 `(policy_type, policy_path)`（#4 GR00T 接縫）**：預設
+  `("smolvla", "HuggingFaceVLA/smolvla_libero")`；傳 `("groot", "nvidia/GR00T-N1.5-3B")` 即切到 GR00T N1.5。
+  因 lerobot 統一 policy 介面，**不需 GR00T 專屬類別**，`run`/`eval_policy` 一行不改——這是最高槓桿的接法。
 - `run` 呼叫 `eval_policy(env, policy, …processors, n_episodes,
   max_episodes_rendered=(N if save_video else 0), videos_dir=…)`，回傳 `aggregated.pc_success` 包成 `RolloutOutcome`。
 - builder 與快取邏輯分離：builder 是碰 lerobot 的薄膠水（Kaggle-only），快取/旗標路由是純邏輯（本機可測）。
@@ -93,14 +109,15 @@ RolloutEngine（協定）
 - `agent/libero_skills.py`：抽出 `RolloutEngine` 協定 + 三實作；`LiberoSkillInterface` 改委派。
 - `agent/agent.py`：`run()` 加 completed memo 與 plan-only 模式旗標。
 - `tests/`：新增 RolloutEngine / memo / plan-only 模式的 mock 測。
-- Kaggle 腳本：`bench_rollout.py`（速度實測 + 成敗 parity）。
+- Kaggle 腳本：`bench_rollout.py`（速度實測 + 成敗 parity；可選 `--policy groot` 跑 GR00T N1.5 一次）。
 
 ## 6. 測試策略
 
 **本機（TDD，擴充現有 42 測，零 GPU/API）：**
 
 - `FakeRolloutEngine` → 測 `execute` 套 `success_threshold` 正確、`save_video` 旗標下傳。
-- fake builder → 測「跑 N 次 builder 只呼叫 1 次」「同 task_id env 第二次命中快取」。
+- fake builder → 測「跑 N 次 builder 只呼叫 1 次」「同 task_id env 第二次命中快取」「builder 收到
+  正確的 `(policy_type, policy_path)`，預設 SmolVLA、可換 GR00T」。
 - `FakeSkills` → 測完成記憶（已成功子任務 replan 被跳過、`execute` 只呼叫一次）。
 - plan-only 模式 → 斷言 `decompose` 跑、`execute` 完全沒被呼叫。
 
@@ -119,6 +136,7 @@ RolloutEngine（協定）
 | 常駐 env 記憶體吃緊 | env 按 task_id lazy 建 + 可設上限驅逐；libero_object 僅 10 task，實務無虞 |
 | in-process 與官方 eval 語意飄移 | Kaggle parity test 擋下；不符即回退 subprocess baseline |
 | 完成記憶誤跳尚未真正完成的任務 | memo 僅在 rollout 回報 success 後寫入；assume_success 模式不寫 memo |
+| GR00T N1.5 在 Kaggle T4 跑不動（Turing 無 flash-attn / VRAM 不足） | 接縫與本機測不受影響（builder 參數化已驗）；GR00T 實測延到租 A6000/L4，SmolVLA 維持便宜預設 |
 
 ## 8. 成功判準
 
@@ -126,3 +144,5 @@ RolloutEngine（協定）
 - Kaggle 實測：in-process 每 task 牆鐘時間 ≪ subprocess（目標數量級）。
 - Kaggle parity：兩引擎成敗判定一致。
 - demo-results 補上「加速前/後」實測數字。
+- #4：本機測證明 builder 可參數化切 GR00T；Ampere+ GPU 上 `bench_rollout.py --policy groot` 至少跑通一次
+  （或明確記錄「T4 不支援、待租 GPU」的誠實結果）。

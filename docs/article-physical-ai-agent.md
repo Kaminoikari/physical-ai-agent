@@ -150,9 +150,9 @@ LIBERO 的 ground-truth，不是我注入的假失敗（早期 mock 版用 `--fa
 
 四句指令、同一個 system prompt（沒為它們改 prompt）：
 
-- **語意分群**：「把**所有醬料**都收進籃子」→ agent 從 10 項物件裡挑出 4 項醬料
-  `execute(2,3,4,5)`。「醬料」這個類別字面上不在任何 task 裡，得靠世界知識歸類——policy 不可能
-  做到，它只懂「pick up the X」。
+- **語意分群**：「把**所有醬料**都收進籃子」→ agent 從 10 項物件裡挑出醬料類依序 execute
+  （salad dressing、bbq sauce、ketchup、tomato sauce…）。「醬料」這個類別字面上不在任何 task 裡，
+  得靠世界知識歸類——policy 不可能做到，它只懂「pick up the X」。
 - **3+ 物件**：「字母湯、牛奶和柳橙汁都收」→ `execute(0,7,9)`，三步依序，證明多步拆解能擴展。
 - **排序**：「先收番茄醬再收字母湯」→ 計畫順序就是先 ketchup(4)、後 alphabet soup(0)，尊重顯式排序。
 
@@ -163,8 +163,9 @@ LIBERO 的 ground-truth，不是我注入的假失敗（早期 mock 版用 `--fa
    通常指 ketchup。plan-only 裡 agent 一致把它判成 ketchup(4)；但情境②的真 rollout 裡同一個詞卻
    對到 tomato sauce(5)。**同一個 agent、同一個詞、不同情境給出不同答案**——這恰恰證明它是該反問的
    歧義，沒有單一「正確解」。我把情境②原本「正確對到 tomato sauce」的說法也一併誠實收回了。
-2. **類別邊界會浮動**。agent 在排除題裡把 `cream cheese`（奶油乳酪）也算進「醬料」，分群題卻沒算。
-   類別歸屬本身模糊——這不是 bug，是語言固有的，而它正是 L3 要面對、policy 碰不到的問題。
+2. **類別邊界會浮動**。「醬料」要不要算進 `cream cheese`（奶油乳酪），agent 在不同次跑之間翻來覆去
+   ——本機分群題沒算它、Kaggle `--live` 重跑卻算了，排除題又算。同一句、同一選單，答案會變。類別歸屬
+   本身模糊——這不是 bug，是語言固有的，而它正是 L3 要面對、policy 碰不到的問題。
 
 plan-only 只證明「拆解這一層」對，不證明 rollout 會成功（那由①〜⑤負責）。但它用幾乎零成本，
 把「為什麼需要一層會分類、會處理否定與排序、還會在歧義前該反問的編排大腦」講得更滿。

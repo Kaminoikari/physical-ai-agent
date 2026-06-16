@@ -13,7 +13,7 @@
 
 ```
 L3  Agent 編排（Claude sonnet-4-6）   理解人話 → 拆解 → 排序 → 邊界/歧義判斷
-        │  agent/agent.py（mock 與真 sim 共用，一行不改）
+        │  agent/agent.py（mock 與真 sim 共用同一套編排骨架）
         ▼
 L2  技能介面（SkillInterface）          execute(task_id) / query
         │  agent/libero_skills.py（真版：驅動 LIBERO+SmolVLA）
@@ -22,10 +22,11 @@ L2  技能介面（SkillInterface）          execute(task_id) / query
 L1  Policy 執行（SmolVLA + LIBERO sim） 單一原子任務的抓放 rollout
 ```
 
-**核心設計：L1 完全解耦。** 本機用 `MockWorld`，雲端換成真 LIBERO，L3 的 `agent.py`
-**一行未改**——換 sim 只動 L2 的技能實作。這是整個專案要證明的工程主張。
+**核心設計：L1 完全解耦。** 本機用 `MockWorld`，雲端換成真 LIBERO，**L3 的編排邏輯
+（迴圈／重試／abort／邊界判斷）不變**——換 sim 主要動 L2 技能實作，`agent.py` 僅為
+task-level `execute` 加一個動作分派分支。這是整個專案要證明的工程主張。
 
-## 四種 agent 行為（全部在真 LIBERO 上跑出）
+## 五種 agent 行為（全部在真 LIBERO 上跑出）
 
 | 情境 | 指令 | agent 行為 | 證明的能力 |
 |---|---|---|---|
@@ -33,6 +34,10 @@ L1  Policy 執行（SmolVLA + LIBERO sim） 單一原子任務的抓放 rollout
 | 多步 | 字母湯和番茄醬**都**收進籃子 | `execute(0)`→`execute(5)` → ✅ | 任務分解 + 排序 |
 | 拒絕 | 幫我把桌子擦乾淨 | ⛔ 超出範圍（不跑 rollout） | 能力邊界自覺 |
 | 澄清 | 把**那個東西**收起來 | ❓ 反問 + 列選項 | 不幻覺、會反問 |
+| 真實失敗 | （`libero_10`）兩樣都收進籃子 | 真 rollout 失敗×3 → 🛑 誠實 abort | 失敗當一等公民（真證據） |
+
+前四種在 `libero_object`；第五種在 `libero_10` 長程任務（官方 checkpoint 僅 ~20% 成功率，
+失敗訊號來自真 ground-truth、非 mock `--fail-first`）。
 
 完整 log 與設計拆解見 [`docs/demo-results.md`](docs/demo-results.md)。
 深入文章見 [`docs/article-physical-ai-agent.md`](docs/article-physical-ai-agent.md)。
@@ -61,7 +66,7 @@ L1  Policy 執行（SmolVLA + LIBERO sim） 單一原子任務的抓放 rollout
 ### 跑測試
 
 ```bash
-.venv/bin/python -m pytest          # 33 tests，全程 mock，零 API 成本
+.venv/bin/python -m pytest          # 35 tests，全程 mock，零 API 成本
 ```
 
 ## Repo 結構
@@ -78,7 +83,7 @@ agent/
   libero_prompts.py 真版系統 prompt（含動態任務選單）
 demo.py             本機 mock CLI
 demo_libero.py      Kaggle 真 LIBERO CLI
-tests/              33 tests（TDD，全程 mock）
+tests/              35 tests（TDD，全程 mock）
 docs/               設計 spec、Kaggle 指南、demo 結果、文章
 week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
 ```
@@ -96,7 +101,8 @@ week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
 
 - **慢**：每次 execute 經 subprocess 重載 policy（~3 min/task）。可改為「載 policy 一次 +
   直接呼叫 `eval_policy()`」加速。
-- **單臂單物件**：LIBERO object suite 都是單物件抓放，未涵蓋雙臂/堆疊/長程任務。
+- **成功率受限於官方 checkpoint，未自行微調**：`libero_object` 單物件抓放 100%；`libero_10`
+  長程任務官方 checkpoint 僅 ~20%（夠當「真實失敗」素材、不適合 happy-path）。未涵蓋雙臂/堆疊。
 - **Week 1 是 metaworld expert 腳本、非 SmolVLA**：SmolVLA 的 SO101 action/obs space 與
   metaworld 4-dim 不相容，zero-shot 接不上；真正用 SmolVLA 驅動是在 Week 2 的 LIBERO。
 - **sim-to-real gap**：全程純模擬，未上實體手臂。

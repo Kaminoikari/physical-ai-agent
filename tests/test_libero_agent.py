@@ -112,7 +112,7 @@ def test_exec_output_dir_is_persistent_and_unique():
 # ── LiberoSkillInterface 注入式測試 ──────────────────────────────────────────
 
 class FakeEngine:
-    def __init__(self, pc_success):
+    def __init__(self, pc_success: float):
         self._pc = pc_success
         self.runs: list[tuple] = []
 

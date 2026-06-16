@@ -7,16 +7,14 @@
 ⚠️ 只能在 Linux + GPU（Kaggle）跑，無法在 Mac 本機執行。所有重依賴皆 lazy import，
    讓本機 import 此模組不致失敗（但 execute/available_tasks 實際呼叫需在 Kaggle）。
 
-v1 工程取捨：execute 以 subprocess 呼叫已驗證的 `lerobot-eval`（重用整條官方管線、
-最穩），代價是每次重載 policy、較慢。日後可改為「載入 policy 一次 + 直接呼叫
-lerobot 的 eval_policy()」加速（見 docs spec 的風險段）。
+execute 現在委派給可注入的 RolloutEngine（預設 InProcessRolloutEngine，
+policy 常駐複用、速度較快）；subprocess 版保留為 SubprocessRolloutEngine
+baseline，在需要隔離或相容性測試時使用。
 """
 
 from __future__ import annotations
 
-import os
-
-from agent.rollout_engine import InProcessRolloutEngine, LerobotPolicyEnvBuilder
+from agent.rollout_engine import InProcessRolloutEngine, LerobotPolicyEnvBuilder, RolloutEngine
 from agent.schemas import SkillResult
 
 DEFAULT_CHECKPOINT = "HuggingFaceVLA/smolvla_libero"
@@ -32,7 +30,7 @@ class LiberoSkillInterface:
         success_threshold: float = 50.0,  # pc_success(%) 達標即視為成功
         save_video: bool = False,
         tasks: list[tuple[int, str]] | None = None,
-        engine=None,
+        engine: RolloutEngine | None = None,
     ) -> None:
         self.suite = suite
         self.checkpoint = checkpoint
@@ -41,6 +39,7 @@ class LiberoSkillInterface:
         self.success_threshold = success_threshold
         self.save_video = save_video
         self._tasks = tasks if tasks is not None else self._load_task_list()
+        self._language_by_id = dict(self._tasks)
         self._engine = (
             engine
             if engine is not None
@@ -75,7 +74,7 @@ class LiberoSkillInterface:
 
     def execute(self, task: str) -> SkillResult:
         task_id = self._resolve_task_id(task)
-        language = dict(self._tasks)[task_id]
+        language = self._language_by_id[task_id]
         outcome = self._engine.run(task_id, save_video=self.save_video,
                                    n_episodes=self.n_episodes)
         ok = outcome.pc_success >= self.success_threshold

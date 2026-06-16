@@ -40,3 +40,42 @@ class PolicyEnvBuilder(Protocol):
 
 class RolloutEngine(Protocol):
     def run(self, task_id: int, *, save_video: bool, n_episodes: int) -> RolloutOutcome: ...
+
+
+class InProcessRolloutEngine:
+    """policy/processor 全 session 建一次；env 按 task_id lazy 建並快取。內呼官方 eval_policy。"""
+
+    def __init__(self, builder: PolicyEnvBuilder, *, eval_fn=None,
+                 videos_dir: str | None = None, max_render_episodes: int = 1) -> None:
+        self._builder = builder
+        self._eval_fn = eval_fn
+        self._videos_dir = videos_dir
+        self._max_render_episodes = max_render_episodes
+        self._bundle: PolicyBundle | None = None
+        self._envs: dict[int, Any] = {}
+
+    def _ensure_eval_fn(self):
+        if self._eval_fn is None:
+            from lerobot.scripts.lerobot_eval import eval_policy  # lazy：Kaggle-only
+            self._eval_fn = eval_policy
+        return self._eval_fn
+
+    def run(self, task_id: int, *, save_video: bool, n_episodes: int) -> RolloutOutcome:
+        if self._bundle is None:
+            self._bundle = self._builder.build_policy()
+        if task_id not in self._envs:
+            self._envs[task_id] = self._builder.build_env(task_id)
+        eval_fn = self._ensure_eval_fn()
+        b = self._bundle
+        info = eval_fn(
+            self._envs[task_id], b.policy,
+            b.env_preprocessor, b.env_postprocessor, b.preprocessor, b.postprocessor,
+            n_episodes=n_episodes,
+            max_episodes_rendered=(self._max_render_episodes if save_video else 0),
+            videos_dir=(self._videos_dir if save_video else None),
+        )
+        videos = info.get("video_paths") or []
+        return RolloutOutcome(
+            pc_success=float(info["aggregated"]["pc_success"]),
+            video_path=videos[0] if videos else None,
+        )

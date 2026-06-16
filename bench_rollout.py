@@ -15,6 +15,7 @@ import time
 from agent.rollout_engine import (
     InProcessRolloutEngine,
     LerobotPolicyEnvBuilder,
+    RolloutEngine,
     SubprocessRolloutEngine,
 )
 
@@ -24,7 +25,7 @@ POLICY_SPECS = {
 }
 
 
-def _time_engine(label, engine, task_ids):
+def _time_engine(label: str, engine: RolloutEngine, task_ids: list[int]) -> dict[int, float]:
     print(f"\n== {label} ==")
     results = {}
     for task_id in task_ids:
@@ -42,6 +43,8 @@ def main() -> None:
     parser.add_argument("--suite", default="libero_object")
     parser.add_argument("--tasks", default="0,1,2")
     parser.add_argument("--threshold", type=float, default=50.0)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--output-root", default="/kaggle/working/bench")
     args = parser.parse_args()
 
     task_ids = [int(t) for t in args.tasks.split(",")]
@@ -49,14 +52,14 @@ def main() -> None:
 
     in_proc = InProcessRolloutEngine(
         LerobotPolicyEnvBuilder(policy_type=policy_type, policy_path=policy_path,
-                                suite=args.suite)
+                                suite=args.suite, device=args.device)
     )
     in_results = _time_engine(f"in-process [{args.policy}]", in_proc, task_ids)
 
     # baseline 僅對 SmolVLA 有意義（subprocess 走 lerobot-eval 預設 checkpoint）
     if args.policy == "smolvla":
         sub = SubprocessRolloutEngine(suite=args.suite, checkpoint=policy_path,
-                                      device="cuda", output_root="/kaggle/working/bench")
+                                      device=args.device, output_root=args.output_root)
         sub_results = _time_engine("subprocess [baseline]", sub, task_ids)
 
         print("\n== 成敗 parity（門檻 %.0f）==" % args.threshold)

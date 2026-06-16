@@ -74,7 +74,14 @@ rollout**，專測更難的語言推理——語意分群（「把**所有醬料
 ### 跑測試
 
 ```bash
-.venv/bin/python -m pytest          # 42 tests，全程 mock，零 API 成本
+.venv/bin/python -m pytest          # 57 tests，全程 mock，零 API 成本
+```
+
+### 量測 rollout 加速（Kaggle）
+
+```bash
+python bench_rollout.py                 # in-process vs subprocess 牆鐘時間 + 成敗 parity
+python bench_rollout.py --policy groot  # 切 GR00T N1.5（需 Ampere+ GPU，見 spec 附錄 A）
 ```
 
 ## Repo 結構
@@ -90,10 +97,12 @@ agent/
   libero_skills.py  L2 真技能（execute/query/available_tasks），subprocess 驅動 lerobot-eval
   libero_prompts.py 真版系統 prompt（含動態任務選單）
   plan_only.py      軸 A：plan-only 拆解驗證（decompose_only/format_plan，純函式、零 lerobot）
+  rollout_engine.py L1/L2 加速接縫：RolloutEngine（InProcess 常駐／Subprocess baseline／GR00T builder）
 demo.py             本機 mock CLI
 demo_libero.py      Kaggle 真 LIBERO CLI
 demo_plan.py        plan-only CLI：只驗拆解、不跑 rollout（本機零 GPU）
-tests/              42 tests（TDD，全程 mock）
+bench_rollout.py    Kaggle 速度實測 + 成敗 parity（in-process vs subprocess；可 --policy groot）
+tests/              57 tests（TDD，全程 mock）
 docs/               設計 spec、Kaggle 指南、demo 結果、文章
 week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
 ```

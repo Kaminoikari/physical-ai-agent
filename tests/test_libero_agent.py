@@ -82,6 +82,19 @@ def test_execute_retry_log_says_rollout_not_verify():
     assert all("驗證" not in line for line in retry_lines)
 
 
+def test_higher_max_retries_allows_more_attempts():
+    """--max-retries 拉高重試上限 → 更多次獨立 rollout 嘗試（demo 在 20% 難任務上
+    用來提高『失敗→重試→救回』的出現機率）。Agent 本就支援 max_retries，這支鎖住
+    該行為，避免日後改壞 flag 的效果。"""
+    skills = FakeLiberoSkill()
+    skills.fail_next_execute = 3  # 前 3 次 rollout 失敗
+    # 預設 max_retries=2（3 試）會在此 abort；拉到 3（4 試）則第 4 次成功救回。
+    agent = Agent(brain=Brain(FakeClient(_plan("task A"))), skills=skills, max_retries=3)
+    result = agent.run("做 task A")
+    assert result.status == "completed"
+    assert len(skills.executed) == 4  # 1 + 3 retries
+
+
 def test_exec_output_dir_is_persistent_and_unique():
     """rollout 輸出要寫到持久、可辨識、每次 attempt 不互相覆蓋的路徑，
     這樣失敗/成功的 mp4 才留得住（取代原本用過即丟的 tempfile）。"""

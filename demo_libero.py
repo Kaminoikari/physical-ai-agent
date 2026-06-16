@@ -31,6 +31,13 @@ def main() -> None:
     parser.add_argument("instruction", help="自然語言指令")
     parser.add_argument("--suite", default="libero_object", help="LIBERO suite")
     parser.add_argument("--model", default="claude-sonnet-4-6", help="agent 大腦模型")
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=2,
+        help="execute 失敗的重試上限（共 max_retries+1 次嘗試）。"
+        "在 libero_10 等低成功率任務上調高，可提高『失敗→重試→救回』的出現機率。",
+    )
     args = parser.parse_args()
 
     print(f"🗣  指令：{args.instruction}")
@@ -42,7 +49,11 @@ def main() -> None:
         print(f"   {task_id}: {language}")
 
     system_prompt = build_system_prompt(skills.available_tasks())
-    agent = Agent(brain=Brain(AnthropicClient(model=args.model), system_prompt=system_prompt), skills=skills)
+    agent = Agent(
+        brain=Brain(AnthropicClient(model=args.model), system_prompt=system_prompt),
+        skills=skills,
+        max_retries=args.max_retries,
+    )
 
     print("\n🤖 agent 規劃並執行中（每個任務 rollout 約數分鐘）…\n")
     result = agent.run(args.instruction)

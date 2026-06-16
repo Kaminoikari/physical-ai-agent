@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
@@ -148,7 +149,7 @@ class LerobotPolicyEnvBuilder:
         self._policy_cfg = None
         self._env_cfg = None
 
-    def _cfgs(self):
+    def _ensure_cfgs(self) -> tuple[Any, Any]:
         if self._policy_cfg is None:
             from lerobot.configs.policies import PreTrainedConfig  # lazy：Kaggle-only
             from lerobot.envs.configs import LiberoEnv              # lazy：Kaggle-only
@@ -164,7 +165,7 @@ class LerobotPolicyEnvBuilder:
         from lerobot.policies.factory import make_policy, make_pre_post_processors  # lazy
         from lerobot.envs.factory import make_env_pre_post_processors               # lazy
 
-        policy_cfg, env_cfg = self._cfgs()
+        policy_cfg, env_cfg = self._ensure_cfgs()
         policy = make_policy(cfg=policy_cfg, env_cfg=env_cfg, rename_map={})
         preprocessor_overrides = {
             "device_processor": {"device": str(policy.config.device)},
@@ -182,13 +183,14 @@ class LerobotPolicyEnvBuilder:
                             preprocessor, postprocessor)
 
     def build_env(self, task_id: int):
-        from lerobot.envs.factory import make_env  # lazy：Kaggle-only
+        from lerobot.envs.factory import make_env
 
-        _, env_cfg = self._cfgs()
+        _, shared_env_cfg = self._ensure_cfgs()
+        env_cfg = copy.deepcopy(shared_env_cfg)  # 每次 local 複製，勿污染共用快取
         env_cfg.task_ids = [task_id]
         envs = make_env(env_cfg, n_envs=self.batch_size, use_async_envs=False,
                         trust_remote_code=True)
-        # make_env 對 libero 回 {suite: {task_id: VectorEnv}}；取出單一 task 的 VectorEnv
+        # make_env 對 libero 回 {suite: {task_id: VectorEnv}}；取出單一 task 的 VectorEnv（lerobot 型別，Kaggle-only）
         if isinstance(envs, dict):
             suite_envs = next(iter(envs.values()))
             return suite_envs[task_id] if task_id in suite_envs else next(iter(suite_envs.values()))

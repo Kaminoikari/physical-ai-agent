@@ -16,7 +16,7 @@ from agent.skills import SkillInterface
 
 @dataclass
 class RunResult:
-    status: str  # "completed" | "out_of_scope" | "needs_clarification" | "aborted"
+    status: str  # "completed" | "out_of_scope" | "needs_clarification" | "aborted" | "planned"
     message: str
     log: list[str] = field(default_factory=list)
 
@@ -34,7 +34,7 @@ class Agent:
         self._max_retries = max_retries
         self._max_iters = max_iters
 
-    def run(self, instruction: str, assume_success: bool = False) -> RunResult:
+    def run(self, instruction: str, assume_success: bool = False, plan_only: bool = False) -> RunResult:
         log: list[str] = []
         observation: str | None = None
         self._current_object: str | None = None
@@ -50,6 +50,11 @@ class Agent:
                 return RunResult("needs_clarification", plan.clarification_question, log)
             if not plan.steps:
                 return RunResult("completed", "無動作需執行", log)
+
+            if plan_only:
+                for index, step in enumerate(plan.steps, start=1):
+                    log.append(f"  計畫 {index}. {step.skill}({step.arg})")
+                return RunResult("planned", "計畫產出（未跑 rollout）", log)
 
             action_taken = False
             for step in plan.steps:

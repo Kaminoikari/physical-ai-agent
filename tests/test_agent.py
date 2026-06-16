@@ -40,3 +40,14 @@ def test_completed_memo_does_not_skip_distinct_execute_args():
     agent = Agent(_Brain(plan), skills)
     agent.run("收番茄醬再收番茄醬汁", assume_success=True)
     assert skills.execute_calls == ["4", "5"]  # 不同 arg 不應被 memo 跳過
+
+
+def test_plan_only_mode_does_not_execute():
+    plan = Plan(reasoning="把醬料收起來", in_scope=True, needs_clarification=False,
+                clarification_question="", steps=[Step("execute", "4")])
+    skills = _Skills()
+    agent = Agent(_Brain(plan), skills)
+    result = agent.run("把所有醬料收起來", plan_only=True)
+    assert skills.execute_calls == []          # 快迴圈不跑 rollout
+    assert result.status == "planned"
+    assert any("execute" in line for line in result.log)

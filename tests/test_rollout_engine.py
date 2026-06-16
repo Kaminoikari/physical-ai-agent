@@ -73,3 +73,13 @@ def test_inprocess_returns_pc_success_from_eval_info():
     engine = InProcessRolloutEngine(FakeBuilder(), eval_fn=FakeEval(pc_success=42.0))
     outcome = engine.run(0, save_video=False, n_episodes=1)
     assert outcome.pc_success == 42.0
+
+
+def test_inprocess_returns_video_path_when_eval_yields_one():
+    def eval_with_video(env, policy, env_pre, env_post, pre, post, *, n_episodes,
+                        max_episodes_rendered, videos_dir):
+        return {"aggregated": {"pc_success": 80.0}, "video_paths": ["/tmp/v/run0.mp4"]}
+
+    engine = InProcessRolloutEngine(FakeBuilder(), eval_fn=eval_with_video, videos_dir="/tmp/v")
+    outcome = engine.run(0, save_video=True, n_episodes=1)
+    assert outcome.video_path == "/tmp/v/run0.mp4"

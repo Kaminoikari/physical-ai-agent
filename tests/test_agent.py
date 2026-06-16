@@ -31,3 +31,12 @@ def test_completed_memo_skips_repeated_successful_execute():
     agent = Agent(_Brain(plan), skills)
     agent.run("先收番茄醬再收番茄醬", assume_success=True)
     assert skills.execute_calls == ["4"]  # 第二個 execute 4 被完成記憶跳過
+
+
+def test_completed_memo_does_not_skip_distinct_execute_args():
+    plan = Plan(reasoning="r", in_scope=True, needs_clarification=False,
+                clarification_question="", steps=[Step("execute", "4"), Step("execute", "5")])
+    skills = _Skills()
+    agent = Agent(_Brain(plan), skills)
+    agent.run("收番茄醬再收番茄醬汁", assume_success=True)
+    assert skills.execute_calls == ["4", "5"]  # 不同 arg 不應被 memo 跳過

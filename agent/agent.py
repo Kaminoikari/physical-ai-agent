@@ -38,6 +38,7 @@ class Agent:
         log: list[str] = []
         observation: str | None = None
         self._current_object: str | None = None
+        completed: set[str] = set()  # 已成功的 execute arg，replan 重排則跳過
 
         for _ in range(self._max_iters):
             plan = self._brain.decompose(instruction, observation)
@@ -58,10 +59,15 @@ class Agent:
                     observation = str(self._skills.query(step.arg, mode="semantic"))
                     log.append(f"觀察：{observation}")
                     continue
+                if step.skill == "execute" and step.arg in completed:
+                    log.append(f"跳過 execute({step.arg})：已完成（completed memo）")
+                    continue
                 if step.skill in ("pick", "place", "execute"):
                     action_taken = True
                     if not self._execute_with_retry(step, assume_success, log):
                         return RunResult("aborted", f"{step.skill}({step.arg}) 連續失敗", log)
+                    if step.skill == "execute":
+                        completed.add(step.arg)
 
             if action_taken:
                 return RunResult("completed", "任務完成", log)

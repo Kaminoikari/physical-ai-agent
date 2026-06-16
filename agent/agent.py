@@ -81,7 +81,8 @@ class Agent:
             if ok:
                 return True
             if attempt < self._max_retries:
-                log.append(f"驗證失敗，重試 {step.skill}（第 {attempt + 1} 次）")
+                reason = "rollout 失敗" if step.skill == "execute" else "驗證失敗"
+                log.append(f"{reason}，重試 {step.skill}（第 {attempt + 1} 次）")
         return False
 
     def _run_action(self, step: Step):

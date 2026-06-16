@@ -67,3 +67,15 @@ def test_persistent_execute_failure_aborts():
     agent = make_agent(skills, FakeClient(_plan("task A")))
     result = agent.run("做 task A")
     assert result.status == "aborted"
+
+
+def test_execute_retry_log_says_rollout_not_verify():
+    """execute 是 task-level rollout，沒有座標驗證那步；重試訊息要誠實講 rollout 失敗。"""
+    skills = FakeLiberoSkill()
+    skills.fail_next_execute = 1
+    agent = make_agent(skills, FakeClient(_plan("task A")))
+    result = agent.run("做 task A")
+    retry_lines = [line for line in result.log if "重試" in line]
+    assert retry_lines
+    assert all("rollout" in line for line in retry_lines)
+    assert all("驗證" not in line for line in retry_lines)

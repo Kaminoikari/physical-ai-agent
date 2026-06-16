@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -79,3 +82,46 @@ class InProcessRolloutEngine:
             pc_success=float(info["aggregated"]["pc_success"]),
             video_path=videos[0] if videos else None,
         )
+
+
+# ── SubprocessRolloutEngine ──────────────────────────────────────────────────
+
+def _exec_output_dir(output_root: str, suite: str, task_id: int, seq: int) -> str:
+    return os.path.join(output_root, suite, f"task{task_id}", f"run{seq}")
+
+
+class SubprocessRolloutEngine:
+    """現行行為：每次 subprocess 叫 lerobot-eval（會重載 policy）。保留作 Kaggle 速度 baseline。"""
+
+    def __init__(self, *, suite: str, checkpoint: str, device: str,
+                 output_root: str) -> None:
+        self._suite = suite
+        self._checkpoint = checkpoint
+        self._device = device
+        self._output_root = output_root
+        self._exec_seq = 0
+
+    def run(self, task_id: int, *, save_video: bool, n_episodes: int) -> RolloutOutcome:
+        out_dir = _exec_output_dir(self._output_root, self._suite, task_id, self._exec_seq)
+        self._exec_seq += 1
+        os.makedirs(out_dir, exist_ok=True)
+        cmd = [
+            "lerobot-eval",
+            f"--policy.path={self._checkpoint}",
+            f"--policy.device={self._device}",
+            "--env.type=libero",
+            f"--env.task={self._suite}",
+            f"--env.task_ids=[{task_id}]",
+            "--eval.batch_size=1",
+            f"--eval.n_episodes={n_episodes}",
+            "--env.max_parallel_tasks=1",
+            f"--output_dir={out_dir}",
+        ]
+        env = {**os.environ, "MUJOCO_GL": os.environ.get("MUJOCO_GL", "egl")}
+        proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        info_path = os.path.join(out_dir, "eval_info.json")
+        if proc.returncode != 0 or not os.path.exists(info_path):
+            raise RuntimeError(f"lerobot-eval 失敗（task {task_id}）：\n{proc.stderr[-2000:]}")
+        with open(info_path) as f:
+            info = json.load(f)
+        return RolloutOutcome(pc_success=float(info["overall"]["pc_success"]))

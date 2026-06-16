@@ -83,3 +83,27 @@ def test_inprocess_returns_video_path_when_eval_yields_one():
     engine = InProcessRolloutEngine(FakeBuilder(), eval_fn=eval_with_video, videos_dir="/tmp/v")
     outcome = engine.run(0, save_video=True, n_episodes=1)
     assert outcome.video_path == "/tmp/v/run0.mp4"
+
+
+# ── SubprocessRolloutEngine ──────────────────────────────────────────────────
+import json
+
+from agent.rollout_engine import SubprocessRolloutEngine
+
+
+def test_subprocess_engine_parses_pc_success(tmp_path, monkeypatch):
+    class FakeProc:
+        returncode = 0
+        stderr = ""
+
+    def fake_run(cmd, env, capture_output, text):
+        out_dir = [a.split("=", 1)[1] for a in cmd if a.startswith("--output_dir=")][0]
+        with open(f"{out_dir}/eval_info.json", "w") as f:
+            json.dump({"overall": {"pc_success": 60.0}}, f)
+        return FakeProc()
+
+    monkeypatch.setattr("agent.rollout_engine.subprocess.run", fake_run)
+    engine = SubprocessRolloutEngine(suite="libero_object", checkpoint="ckpt",
+                                     device="cuda", output_root=str(tmp_path))
+    outcome = engine.run(0, save_video=False, n_episodes=1)
+    assert outcome.pc_success == 60.0

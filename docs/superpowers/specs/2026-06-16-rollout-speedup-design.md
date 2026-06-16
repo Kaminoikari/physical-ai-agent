@@ -146,3 +146,36 @@ RolloutEngine（協定）
 - demo-results 補上「加速前/後」實測數字。
 - #4：本機測證明 builder 可參數化切 GR00T；Ampere+ GPU 上 `bench_rollout.py --policy groot` 至少跑通一次
   （或明確記錄「T4 不支援、待租 GPU」的誠實結果）。
+
+## 附錄 A：切換 GR00T 時的租 GPU 選項與「一次接通」SOP
+
+來源：cloud GPU 比較與 MuJoCo/EGL、GR00T 依賴查證（2026-06）。目標：最高成功率、一次接通。
+
+### A.1 平台與 GPU 選擇（已定）
+
+- **平台：RunPod — Secure Cloud**（非 Community Cloud）。理由：資料中心級、~99% uptime、**容器內有 root**
+  （LIBERO 需 `apt-get` 裝 EGL，非 root 會卡）、PyTorch 官方模板、秒計費、客服/Discord 活躍。
+- **GPU：RTX A6000 48GB**（~$0.80/hr）。理由：**與 NVIDIA 測 GR00T-in-LeRobot 同款硬體** → 最不會踩未測過的坑；
+  48GB 對 3B 模型 + LIBERO sim 無 VRAM 疑慮；Ampere → flash-attn 可用。
+- **不選**：Lambda（99.9% 但熱門卡常缺貨，租不到就談不上一次接通）；Vast.ai（最便宜但個人主機、可中斷、
+  驅動不一、客服近無 → 一次成功率低）。成本敏感且願承擔變動時，Vast.ai 才作備案。
+
+### A.2 一次接通 SOP（最高成功率：一次只變一個變數）
+
+1. **開 Pod**：RunPod Secure Cloud → RTX A6000 → 官方 **PyTorch 2.x / CUDA 12.x** 模板（torch/CUDA 預裝，
+   flash-attn 才編得起來）。掛一個 **Network Volume**（持久），把 checkpoint 下載放上去，重啟不必重抓。
+2. **系統依賴（root）**：`apt-get update && apt-get install -y libegl1-mesa libgl1-mesa-glx`；
+   設 `export MUJOCO_GL=egl`（沿用本專案既有設定）。
+3. **裝 lerobot + 兩個 extras**：`pip install -e ".[libero,groot,dev,test]"`；GR00T 另需 `flash-attn==2.7.1.post4`、
+   `dm-control==1.0.14`（與 Isaac-GR00T 對齊的釘版）。
+4. **避開本專案已知雷**：先寫 `~/.libero/config.yaml`（否則 LIBERO 首次 import 會卡互動式 input）；
+   `HF_TOKEN` 載入（GR00T 模型若為 gated）。
+5. **先 parity 再換卡心臟**：先跑 `bench_rollout.py`（**SmolVLA**，已知 good）確認 in-process 管線在 A6000 上通；
+   **通了之後**才 `--policy groot` 把 builder 翻成 `("groot","nvidia/GR00T-N1.5-3B")`。如此一旦失敗，立即可判
+   是「環境問題」還是「GR00T 特有問題」——這是一次接通的關鍵。
+6. **量完即關 Pod**（秒計費）；產物留 Network Volume / 下載回本機。
+
+### A.3 成本估算
+
+A6000 ~$0.80/hr；裝環境 + parity + GR00T 跑一輪估 1–2 小時 ≈ **$1–2/次**。Network Volume 另計（GB·月，零頭）。
+SmolVLA 路線仍在免費 Kaggle T4 上跑，GR00T 才動用租用 GPU——維持「便宜預設、前沿 opt-in」。

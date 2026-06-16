@@ -51,6 +51,7 @@ def main() -> None:
     for line in result.log:
         print(f"  • {line}")
     print(f"\n{_STATUS_LABEL.get(result.status, result.status)}：{result.message}")
+    print(f"🎬 各次 rollout 影片（含失敗/成功）：{skills.output_root}/")
 
 
 if __name__ == "__main__":

@@ -17,11 +17,18 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 
 from agent.schemas import SkillResult
 
 DEFAULT_CHECKPOINT = "HuggingFaceVLA/smolvla_libero"
+# Kaggle 上的持久輸出根目錄；session 內不會被清掉，可從 Output 面板下載。
+DEFAULT_OUTPUT_ROOT = "/kaggle/working/libero_exec"
+
+
+def exec_output_dir(output_root: str, suite: str, task_id: int, seq: int) -> str:
+    """rollout 輸出的持久路徑。seq 每次 execute 遞增 → 各 attempt 各自一個目錄、
+    不互相覆蓋，失敗與成功的 mp4 都留得住（取代原本用過即丟的 tempfile）。"""
+    return os.path.join(output_root, suite, f"task{task_id}", f"run{seq}")
 
 
 class LiberoSkillInterface:
@@ -32,12 +39,15 @@ class LiberoSkillInterface:
         device: str = "cuda",
         n_episodes: int = 1,
         success_threshold: float = 50.0,  # pc_success(%) 達標即視為成功
+        output_root: str = DEFAULT_OUTPUT_ROOT,
     ) -> None:
         self.suite = suite
         self.checkpoint = checkpoint
         self.device = device
         self.n_episodes = n_episodes
         self.success_threshold = success_threshold
+        self.output_root = output_root
+        self._exec_seq = 0  # 每次 rollout 遞增，保證輸出目錄不撞、不覆蓋
         self._tasks = self._load_task_list()
 
     def _load_task_list(self) -> list[tuple[int, str]]:
@@ -72,7 +82,9 @@ class LiberoSkillInterface:
         )
 
     def _run_eval(self, task_id: int) -> bool:
-        out_dir = tempfile.mkdtemp(prefix="libero_exec_")
+        out_dir = exec_output_dir(self.output_root, self.suite, task_id, self._exec_seq)
+        self._exec_seq += 1
+        os.makedirs(out_dir, exist_ok=True)
         cmd = [
             "lerobot-eval",
             f"--policy.path={self.checkpoint}",

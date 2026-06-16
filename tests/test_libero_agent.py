@@ -6,6 +6,7 @@ FakeLiberoSkill 不依賴 lerobot，Mac 上可跑；驗證 agent.py 的 execute 
 
 from agent.brain import Brain, FakeClient
 from agent.agent import Agent
+from agent.libero_skills import exec_output_dir
 from agent.schemas import SkillResult
 
 
@@ -79,3 +80,16 @@ def test_execute_retry_log_says_rollout_not_verify():
     assert retry_lines
     assert all("rollout" in line for line in retry_lines)
     assert all("驗證" not in line for line in retry_lines)
+
+
+def test_exec_output_dir_is_persistent_and_unique():
+    """rollout 輸出要寫到持久、可辨識、每次 attempt 不互相覆蓋的路徑，
+    這樣失敗/成功的 mp4 才留得住（取代原本用過即丟的 tempfile）。"""
+    root = "/kaggle/working/libero_exec"
+    first = exec_output_dir(root, "libero_10", 0, 0)
+    second = exec_output_dir(root, "libero_10", 0, 1)
+    assert first.startswith(root)          # 持久根目錄，非 /tmp
+    assert "/tmp" not in first             # 不再用 tempfile
+    assert "libero_10" in first            # 可辨識 suite
+    assert "task0" in first                # 可辨識 task
+    assert first != second                 # 每次 attempt 各自一個目錄，不覆蓋

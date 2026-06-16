@@ -107,3 +107,20 @@ def test_subprocess_engine_parses_pc_success(tmp_path, monkeypatch):
                                      device="cuda", output_root=str(tmp_path))
     outcome = engine.run(0, save_video=False, n_episodes=1)
     assert outcome.pc_success == 60.0
+
+
+# ── LerobotPolicyEnvBuilder ──────────────────────────────────────────────────
+
+from agent.rollout_engine import LerobotPolicyEnvBuilder
+
+
+def test_builder_defaults_to_smolvla():
+    builder = LerobotPolicyEnvBuilder()
+    assert builder.policy_type == "smolvla"
+    assert builder.policy_path == "HuggingFaceVLA/smolvla_libero"
+
+
+def test_builder_can_target_groot():
+    builder = LerobotPolicyEnvBuilder(policy_type="groot", policy_path="nvidia/GR00T-N1.5-3B")
+    assert builder.policy_type == "groot"
+    assert builder.policy_path == "nvidia/GR00T-N1.5-3B"

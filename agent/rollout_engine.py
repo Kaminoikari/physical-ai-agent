@@ -125,3 +125,71 @@ class SubprocessRolloutEngine:
         with open(info_path) as f:
             info = json.load(f)
         return RolloutOutcome(pc_success=float(info["overall"]["pc_success"]))
+
+
+# ── LerobotPolicyEnvBuilder ──────────────────────────────────────────────────
+
+class LerobotPolicyEnvBuilder:
+    """碰 lerobot 的薄膠水：建 policy + 四 processor + 各 task 的 env，全部 lazy import。
+
+    接線對齊官方 lerobot_eval.eval_main()。policy_type/policy_path 參數化 → 換 GR00T 只改這兩個值。
+    cfg 物件的精確欄位依安裝的 lerobot 版本在 Kaggle 上微調（這是本檔唯一 Kaggle-only 的區塊）。
+    """
+
+    def __init__(self, *, policy_type: str = "smolvla",
+                 policy_path: str = "HuggingFaceVLA/smolvla_libero",
+                 suite: str = "libero_object", device: str = "cuda",
+                 batch_size: int = 1) -> None:
+        self.policy_type = policy_type
+        self.policy_path = policy_path
+        self.suite = suite
+        self.device = device
+        self.batch_size = batch_size
+        self._policy_cfg = None
+        self._env_cfg = None
+
+    def _cfgs(self):
+        if self._policy_cfg is None:
+            from lerobot.configs.policies import PreTrainedConfig  # lazy：Kaggle-only
+            from lerobot.envs.configs import LiberoEnv              # lazy：Kaggle-only
+
+            self._policy_cfg = PreTrainedConfig.from_pretrained(self.policy_path)
+            self._policy_cfg.type = self.policy_type
+            self._policy_cfg.device = self.device
+            self._policy_cfg.pretrained_path = self.policy_path
+            self._env_cfg = LiberoEnv(task=self.suite)
+        return self._policy_cfg, self._env_cfg
+
+    def build_policy(self) -> PolicyBundle:
+        from lerobot.policies.factory import make_policy, make_pre_post_processors  # lazy
+        from lerobot.envs.factory import make_env_pre_post_processors               # lazy
+
+        policy_cfg, env_cfg = self._cfgs()
+        policy = make_policy(cfg=policy_cfg, env_cfg=env_cfg, rename_map={})
+        preprocessor_overrides = {
+            "device_processor": {"device": str(policy.config.device)},
+            "rename_observations_processor": {"rename_map": {}},
+        }
+        preprocessor, postprocessor = make_pre_post_processors(
+            policy_cfg=policy_cfg,
+            pretrained_path=policy_cfg.pretrained_path,
+            preprocessor_overrides=preprocessor_overrides,
+        )
+        env_preprocessor, env_postprocessor = make_env_pre_post_processors(
+            env_cfg=env_cfg, policy_cfg=policy_cfg
+        )
+        return PolicyBundle(policy, env_preprocessor, env_postprocessor,
+                            preprocessor, postprocessor)
+
+    def build_env(self, task_id: int):
+        from lerobot.envs.factory import make_env  # lazy：Kaggle-only
+
+        _, env_cfg = self._cfgs()
+        env_cfg.task_ids = [task_id]
+        envs = make_env(env_cfg, n_envs=self.batch_size, use_async_envs=False,
+                        trust_remote_code=True)
+        # make_env 對 libero 回 {suite: {task_id: VectorEnv}}；取出單一 task 的 VectorEnv
+        if isinstance(envs, dict):
+            suite_envs = next(iter(envs.values()))
+            return suite_envs[task_id] if task_id in suite_envs else next(iter(suite_envs.values()))
+        return envs

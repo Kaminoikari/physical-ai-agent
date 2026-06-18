@@ -120,8 +120,9 @@ week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
 
 ## 誠實的限制
 
-- **慢**：每次 execute 經 subprocess 重載 policy（~3 min/task）。可改為「載 policy 一次 +
-  直接呼叫 `eval_policy()`」加速。
+- **慢（已解）**：subprocess 版每次 execute 重載 policy（~270s/task）。已實作
+  `InProcessRolloutEngine`（policy/env 常駐複用、直接呼叫 `eval_policy()`）——Kaggle T4 實測
+  穩態約 **2.0× 加速**、每 task 省 ~139s，成敗 parity 全 ✅（見 demo-results.md ⑦）。
 - **成功率受限於官方 checkpoint，未自行微調**：`libero_object` 單物件抓放 100%；`libero_10`
   長程任務官方 checkpoint 實測僅 ~5%（夠當「真實失敗」素材、不適合 happy-path）。未涵蓋雙臂/堆疊。
 - **Week 1 是 metaworld expert 腳本、非 SmolVLA**：SmolVLA 的 SO101 action/obs space 與

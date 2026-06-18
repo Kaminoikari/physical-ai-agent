@@ -16,6 +16,9 @@ from agent.agent import Agent
 from agent.brain import AnthropicClient, Brain
 from agent.libero_prompts import build_system_prompt
 from agent.libero_skills import LiberoSkillInterface
+from agent.rollout_engine import InProcessRolloutEngine, LerobotPolicyEnvBuilder
+
+VIDEOS_DIR = "/kaggle/working/libero_exec"
 
 _STATUS_LABEL = {
     "completed": "✅ 完成",
@@ -42,7 +45,11 @@ def main() -> None:
 
     print(f"🗣  指令：{args.instruction}")
     print(f"🔧 載入 LIBERO suite={args.suite} 與 SmolVLA checkpoint…")
-    skills = LiberoSkillInterface(suite=args.suite)
+    engine = InProcessRolloutEngine(
+        LerobotPolicyEnvBuilder(suite=args.suite),
+        videos_dir=VIDEOS_DIR,
+    )
+    skills = LiberoSkillInterface(suite=args.suite, save_video=True, engine=engine)
 
     print("📋 可用任務選單：")
     for task_id, language in skills.available_tasks():
@@ -62,7 +69,7 @@ def main() -> None:
     for line in result.log:
         print(f"  • {line}")
     print(f"\n{_STATUS_LABEL.get(result.status, result.status)}：{result.message}")
-    print(f"🎬 各次 rollout 影片（含失敗/成功）：{skills.output_root}/")
+    print(f"🎬 各次 rollout 影片（含失敗/成功）：{VIDEOS_DIR}/")
 
 
 if __name__ == "__main__":

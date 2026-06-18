@@ -6,7 +6,8 @@ FakeLiberoSkill 不依賴 lerobot，Mac 上可跑；驗證 agent.py 的 execute 
 
 from agent.brain import Brain, FakeClient
 from agent.agent import Agent
-from agent.libero_skills import exec_output_dir
+from agent.libero_skills import LiberoSkillInterface
+from agent.rollout_engine import exec_output_dir, RolloutOutcome
 from agent.schemas import SkillResult
 
 
@@ -106,3 +107,39 @@ def test_exec_output_dir_is_persistent_and_unique():
     assert "libero_10" in first            # 可辨識 suite
     assert "task0" in first                # 可辨識 task
     assert first != second                 # 每次 attempt 各自一個目錄，不覆蓋
+
+
+# ── LiberoSkillInterface 注入式測試 ──────────────────────────────────────────
+
+class FakeEngine:
+    def __init__(self, pc_success: float):
+        self._pc = pc_success
+        self.runs: list[tuple] = []
+
+    def run(self, task_id, *, save_video, n_episodes):
+        self.runs.append((task_id, save_video, n_episodes))
+        return RolloutOutcome(pc_success=self._pc)
+
+
+FAKE_TASKS = [(0, "pick up the alphabet soup"), (4, "pick up the ketchup")]
+
+
+def test_execute_ok_when_pc_success_meets_threshold():
+    skills = LiberoSkillInterface(tasks=FAKE_TASKS, engine=FakeEngine(80.0),
+                                  success_threshold=50.0)
+    result = skills.execute("0")
+    assert result.ok is True
+
+
+def test_execute_fails_when_pc_success_below_threshold():
+    skills = LiberoSkillInterface(tasks=FAKE_TASKS, engine=FakeEngine(20.0),
+                                  success_threshold=50.0)
+    result = skills.execute("0")
+    assert result.ok is False
+
+
+def test_execute_delegates_task_id_and_flags_to_engine():
+    engine = FakeEngine(80.0)
+    skills = LiberoSkillInterface(tasks=FAKE_TASKS, engine=engine, n_episodes=1)
+    skills.execute("4")
+    assert engine.runs == [(4, False, 1)]

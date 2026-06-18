@@ -17,7 +17,7 @@ class SkillResult:
 class Step:
     """plan 裡的單一技能呼叫。"""
 
-    skill: str  # "pick" | "place" | "query" | "abort"
+    skill: str  # "pick" | "place" | "execute" | "query" | "abort"
     arg: str
 
 

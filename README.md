@@ -74,8 +74,17 @@ rollout**，專測更難的語言推理——語意分群（「把**所有醬料
 ### 跑測試
 
 ```bash
-.venv/bin/python -m pytest          # 42 tests，全程 mock，零 API 成本
+.venv/bin/python -m pytest          # 57 tests，全程 mock，零 API 成本
 ```
+
+### 量測 rollout 加速（Kaggle）
+
+```bash
+python bench_rollout.py                 # in-process vs subprocess 牆鐘時間 + 成敗 parity
+python bench_rollout.py --policy groot  # 切 GR00T N1.5（需 Ampere+ GPU，見 spec 附錄 A）
+```
+
+完整 Kaggle step-by-step 見 [`docs/kaggle-bench-rollout-walkthrough.md`](docs/kaggle-bench-rollout-walkthrough.md)。
 
 ## Repo 結構
 
@@ -90,10 +99,12 @@ agent/
   libero_skills.py  L2 真技能（execute/query/available_tasks），subprocess 驅動 lerobot-eval
   libero_prompts.py 真版系統 prompt（含動態任務選單）
   plan_only.py      軸 A：plan-only 拆解驗證（decompose_only/format_plan，純函式、零 lerobot）
+  rollout_engine.py L1/L2 加速接縫：RolloutEngine（InProcess 常駐／Subprocess baseline／GR00T builder）
 demo.py             本機 mock CLI
 demo_libero.py      Kaggle 真 LIBERO CLI
 demo_plan.py        plan-only CLI：只驗拆解、不跑 rollout（本機零 GPU）
-tests/              42 tests（TDD，全程 mock）
+bench_rollout.py    Kaggle 速度實測 + 成敗 parity（in-process vs subprocess；可 --policy groot）
+tests/              57 tests（TDD，全程 mock）
 docs/               設計 spec、Kaggle 指南、demo 結果、文章
 week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
 ```
@@ -109,8 +120,9 @@ week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
 
 ## 誠實的限制
 
-- **慢**：每次 execute 經 subprocess 重載 policy（~3 min/task）。可改為「載 policy 一次 +
-  直接呼叫 `eval_policy()`」加速。
+- **慢（已解）**：subprocess 版每次 execute 重載 policy（~270s/task）。已實作
+  `InProcessRolloutEngine`（policy/env 常駐複用、直接呼叫 `eval_policy()`）——Kaggle T4 實測
+  穩態約 **2.0× 加速**、每 task 省 ~139s，成敗 parity 全 ✅（見 demo-results.md ⑦）。
 - **成功率受限於官方 checkpoint，未自行微調**：`libero_object` 單物件抓放 100%；`libero_10`
   長程任務官方 checkpoint 實測僅 ~5%（夠當「真實失敗」素材、不適合 happy-path）。未涵蓋雙臂/堆疊。
 - **Week 1 是 metaworld expert 腳本、非 SmolVLA**：SmolVLA 的 SO101 action/obs space 與

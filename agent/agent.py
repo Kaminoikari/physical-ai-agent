@@ -16,7 +16,7 @@ from agent.skills import SkillInterface
 
 @dataclass
 class RunResult:
-    status: str  # "completed" | "out_of_scope" | "needs_clarification" | "aborted"
+    status: str  # "completed" | "out_of_scope" | "needs_clarification" | "aborted" | "planned"
     message: str
     log: list[str] = field(default_factory=list)
 
@@ -34,10 +34,11 @@ class Agent:
         self._max_retries = max_retries
         self._max_iters = max_iters
 
-    def run(self, instruction: str, assume_success: bool = False) -> RunResult:
+    def run(self, instruction: str, assume_success: bool = False, plan_only: bool = False) -> RunResult:
         log: list[str] = []
         observation: str | None = None
         self._current_object: str | None = None
+        completed: set[str] = set()  # 已成功的 execute arg，replan 重排則跳過
 
         for _ in range(self._max_iters):
             plan = self._brain.decompose(instruction, observation)
@@ -50,6 +51,11 @@ class Agent:
             if not plan.steps:
                 return RunResult("completed", "無動作需執行", log)
 
+            if plan_only:
+                for index, step in enumerate(plan.steps, start=1):
+                    log.append(f"  計畫 {index}. {step.skill}({step.arg})")
+                return RunResult("planned", "計畫產出（未跑 rollout）", log)
+
             action_taken = False
             for step in plan.steps:
                 if step.skill == "abort":
@@ -58,10 +64,15 @@ class Agent:
                     observation = str(self._skills.query(step.arg, mode="semantic"))
                     log.append(f"觀察：{observation}")
                     continue
+                if step.skill == "execute" and step.arg in completed:
+                    log.append(f"跳過 execute({step.arg})：已完成（completed memo）")
+                    continue
                 if step.skill in ("pick", "place", "execute"):
                     action_taken = True
                     if not self._execute_with_retry(step, assume_success, log):
                         return RunResult("aborted", f"{step.skill}({step.arg}) 連續失敗", log)
+                    if step.skill == "execute":
+                        completed.add(step.arg)
 
             if action_taken:
                 return RunResult("completed", "任務完成", log)

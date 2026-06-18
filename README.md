@@ -84,6 +84,8 @@ python bench_rollout.py                 # in-process vs subprocess 牆鐘時間 
 python bench_rollout.py --policy groot  # 切 GR00T N1.5（需 Ampere+ GPU，見 spec 附錄 A）
 ```
 
+完整 Kaggle step-by-step 見 [`docs/kaggle-bench-rollout-walkthrough.md`](docs/kaggle-bench-rollout-walkthrough.md)。
+
 ## Repo 結構
 
 ```

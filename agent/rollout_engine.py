@@ -155,8 +155,10 @@ class LerobotPolicyEnvBuilder:
             from lerobot.configs.policies import PreTrainedConfig  # lazy：Kaggle-only
             from lerobot.envs.configs import LiberoEnv              # lazy：Kaggle-only
 
+            # from_pretrained 依 checkpoint 的 config.json 自動回正確子類別
+            # （smolvla→SmolVLAConfig、groot→GR00TConfig），.type 是唯讀 property，
+            # 不可也不需手動設；換 policy 只靠 policy_path 即可。
             self._policy_cfg = PreTrainedConfig.from_pretrained(self.policy_path)
-            self._policy_cfg.type = self.policy_type
             self._policy_cfg.device = self.device
             self._policy_cfg.pretrained_path = self.policy_path
             self._env_cfg = LiberoEnv(task=self.suite)

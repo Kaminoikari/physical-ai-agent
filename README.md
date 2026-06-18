@@ -115,4 +115,10 @@ week1_*.py          Week 1：metaworld 模擬「看手臂動起來」的驗證
   長程任務官方 checkpoint 實測僅 ~5%（夠當「真實失敗」素材、不適合 happy-path）。未涵蓋雙臂/堆疊。
 - **Week 1 是 metaworld expert 腳本、非 SmolVLA**：SmolVLA 的 SO101 action/obs space 與
   metaworld 4-dim 不相容，zero-shot 接不上；真正用 SmolVLA 驅動是在 Week 2 的 LIBERO。
-- **sim-to-real gap**：全程純模擬，未上實體手臂。
+- **sim-to-real gap**：編排層（L3）全程純模擬，未上實體手臂的 closed-loop。但已另闢一條
+  **real-robot fine-tune 軌跡**：用社群真 SO-101 遙操作資料集（`lerobot/svla_so101_pickplace`，
+  50 episodes）在 Kaggle 把 `smolvla_base` fine-tune 跑通、loss 收斂、checkpoint 上 HF Hub
+  （[`Kaminoikari/smolvla-so101-pickplace-ft`](https://huggingface.co/Kaminoikari/smolvla-so101-pickplace-ft)）。
+  這證明了「讀真資料→微調 VLA→出 checkpoint」整條 pipeline；**仍缺**的是實體手臂的
+  closed-loop 成功率（要接真 SO-101 或對應 sim 才量得到）。流程見
+  [`docs/kaggle-finetune-smolvla-so101.md`](docs/kaggle-finetune-smolvla-so101.md)。

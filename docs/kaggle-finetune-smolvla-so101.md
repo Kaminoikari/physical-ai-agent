@@ -59,17 +59,32 @@ print("一個 sample 的 keys:", list(ds[0].keys()))
 
 ## 4. Fine-tune（第四個 cell）——先冒煙測試，再決定要不要拉長
 T4 16GB 跑不動官方的 `batch_size=64`。**第一輪先用小設定驗證「能跑、loss 會降」**：
+先一個獨立 cell 清殘留（**不要**和下面的訓練指令塞同一個 cell——兩個 `!` 加空行會讓
+Jupyter 續行解析錯亂報 `IndentationError`）：
+```python
+!rm -rf /kaggle/working/smolvla_so101   # 清掉上次失敗殘留，免得報「已存在」
+```
+再另一個 cell 跑訓練：
 ```python
 !lerobot-train \
   --policy.path=lerobot/smolvla_base \
   --dataset.repo_id=lerobot/svla_so101_pickplace \
+  --rename_map='{"observation.images.up": "observation.images.camera1", "observation.images.side": "observation.images.camera2"}' \
   --batch_size=8 \
   --steps=2000 \
   --output_dir=/kaggle/working/smolvla_so101 \
   --job_name=smolvla_so101_smoke \
   --policy.device=cuda \
+  --policy.push_to_hub=false \
   --wandb.enable=false
 ```
+> - **`--rename_map` 不可省**：`smolvla_base` 預設期待 3 個相機 `camera1/2/3`，本資料集只有
+>   `up`／`side` 兩個。lerobot 的驗證規則是「資料集相機 ⊆ policy 期待相機」才放行，所以把
+>   `up→camera1`、`side→camera2`（JSON 用單引號包住），湊成子集即通過，第三個相機 smolvla
+>   自動留空。不加會報 `Feature mismatch ... Missing: camera1/2/3, Extra: side/up`。
+> - **`--policy.push_to_hub=false` 不可省**：lerobot-train 預設會想把模型 push 到 Hub，
+>   沒給就會報 `'policy.repo_id' argument missing`。冒煙階段關掉它，checkpoint 留在
+>   `output_dir`，要留再用步驟 6 手動 push。
 > - **冒煙通過後**（loss 明顯下降、無 OOM），要練「真的學起來」再把 `--steps` 拉到
 >   `10000`～`20000`、`--batch_size` 在不 OOM 前提下調大（T4 大概到 8～16）。20k steps 在 T4
 >   會遠比 A100 的 4hr 久，分次跑或用 checkpoint 續訓。
@@ -82,13 +97,16 @@ T4 16GB 跑不動官方的 `batch_size=64`。**第一輪先用小設定驗證「
 2. **離線 action 誤差**：拿訓練時沒看過的 frame，比對「policy 預測的 action」vs「資料集
    裡的真 action」。誤差小 = 模型在模仿。下面是可改的草稿（依你的 lerobot 版本微調
    API 名稱）：
+> **checkpoint 路徑**：lerobot 存在 `output_dir/checkpoints/last/pretrained_model/`，
+> 不是 output_dir 根目錄。先 `!ls -R /kaggle/working/smolvla_so101/checkpoints/last` 確認。
 ```python
 # 草稿：離線 action 誤差（held-out 概念示意，跑前對照你版本的 policy/dataset API）
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 
-policy = SmolVLAPolicy.from_pretrained("/kaggle/working/smolvla_so101")
+CKPT = "/kaggle/working/smolvla_so101/checkpoints/last/pretrained_model"
+policy = SmolVLAPolicy.from_pretrained(CKPT)
 policy.eval().to("cuda")
 
 ds = LeRobotDataset("lerobot/svla_so101_pickplace")
@@ -112,7 +130,9 @@ from huggingface_hub import HfApi
 api = HfApi()
 repo = f"{HF_USER}/smolvla-so101-pickplace-ft"
 api.create_repo(repo, repo_type="model", exist_ok=True)
-api.upload_folder(folder_path="/kaggle/working/smolvla_so101", repo_id=repo, repo_type="model")
+api.upload_folder(
+    folder_path="/kaggle/working/smolvla_so101/checkpoints/last/pretrained_model",
+    repo_id=repo, repo_type="model")
 print("pushed:", repo)
 ```
 > 之後若真買了 SO-101，就能直接 `--policy.path=你的帳號/smolvla-so101-pickplace-ft`
@@ -125,6 +145,10 @@ print("pushed:", repo)
 - **離線 eval 腳本 API 對不上** → 不同 lerobot 版本 `select_action` / policy 類名會變，
   以 `lerobot-train --help` 與安裝後的 `lerobot.policies` 實際模組為準（這段是草稿，非保證可跑）。
 - **Session 逾時** → 訓練未完先 push 已存的 checkpoint；長訓練分段續訓。
+- **20k 步在 T4 跑不完** → 實測 T4 約 2.34 s/step，2000 步 ~78 分鐘，20k 步 ~13 小時，
+  超過 Kaggle 單 session 12 小時上限。要練到 paper 等級得：加 `--save_freq` 跨 session
+  `--resume=true` 續訓，或租 RunPod A6000/A100（見 rollout-speedup spec 附錄 A）。冒煙 2000
+  步足以證明 pipeline 跑通、loss 收斂。
 
 ## 你練到了什麼 / 還缺什麼（對照你的目標）
 - ✅ **A 軸 pipeline 技能（完整拿到）**：讀真 robot 資料集 → 在預訓練 VLA 上 fine-tune →
